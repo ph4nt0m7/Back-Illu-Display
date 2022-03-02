@@ -38,7 +38,7 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define FRAME_SIZE (240 * 240 * 2)
+#define FRAME_SIZE (240 * 240)
 
 /* USER CODE END PM */
 
@@ -49,7 +49,7 @@ TIM_HandleTypeDef htim16;
 
 /* USER CODE BEGIN PV */
 uint16_t pwm_value = 0;
-static uint8_t frame_buf[FRAME_SIZE];
+static uint16_t frame_buf[FRAME_SIZE];
 
 /* USER CODE END PV */
 
@@ -59,7 +59,6 @@ static void MX_GPIO_Init(void);
 static void MX_SPI2_Init(void);
 static void MX_TIM16_Init(void);
 /* USER CODE BEGIN PFP */
-void GC9A01_spi_tx(uint8_t *data, size_t len);
 void setPWM(int8_t value);
 void TestDisplayLoop(void);
 
@@ -67,14 +66,54 @@ void TestDisplayLoop(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void GC9A01_spi_tx(uint8_t *data, size_t len) {
-    HAL_SPI_Transmit(&hspi2, data, len, 1);
+uint16_t RGB565(uint8_t R, uint8_t G, uint8_t B){
+	R 	/= 8;
+	G 	/= 4;
+	B 	/= 8;
+
+	uint8_t hi = ((G & 0x07) << 5) | ((B & 0x1F));
+	uint8_t lo = ((G & 0x38) >> 3) | ((R & 0x1F) << 3);
+
+	return lo | (hi << 8);
 }
 
-void setPWM(int8_t value){
+
+
+void setPWM(int8_t value) {
 	  TIM16->CCR1 = value;
 }
 
+void TestFillColor(uint8_t *color) {
+	// First pixel: transmit command
+    DC_OFF();
+    CS_OFF();
+    HAL_SPI_Transmit(&hspi2, MEM_WR, 1, 1);
+    CS_ON();
+
+	// First pixel: transmit color
+    DC_ON();
+    CS_OFF();
+    HAL_SPI_Transmit(&hspi2, color, 3, 1);
+    CS_ON();
+
+    for (uint16_t i = 0; i < (240*240 - 1); i++) {
+    	// Other pixels: transmit command
+        DC_OFF();
+        CS_OFF();
+        HAL_SPI_Transmit(&hspi2, MEM_WR_CONT, 1, 1);
+        CS_ON();
+
+    	// Other pixels: transmit color
+        DC_ON();
+        CS_OFF();
+        HAL_SPI_Transmit(&hspi2, color, 3, 1);
+        CS_ON();
+
+    }
+
+}
+
+/*
 void TestDisplayLoop(void){
 	  uint8_t color[3];
 	      // Triangle
@@ -88,13 +127,13 @@ void TestDisplayLoop(void){
 	                  color[2] = 0x00;
 	              }
 	              if (x == 0 && y == 0) {
-	            	  GPIOC->BSRR = GPIO_BSRR_BS8;
+//	            	  GPIOC->BSRR = GPIO_BSRR_BS8;
 	                  GC9A01_write(color, sizeof(color));
-	                  GPIOC->BSRR = GPIO_BSRR_BR8;
+//	                  GPIOC->BSRR = GPIO_BSRR_BR8;
 	              } else {
-	            	  GPIOC->BSRR = GPIO_BSRR_BS8;
+//	            	  GPIOC->BSRR = GPIO_BSRR_BS8;
 	                  GC9A01_write_continue(color, sizeof(color));
-	                  GPIOC->BSRR = GPIO_BSRR_BR8;
+//	                  GPIOC->BSRR = GPIO_BSRR_BR8;
 
 	              }
 	          }
@@ -163,6 +202,36 @@ void TestDisplayLoop(void){
 	      // setPWM(1);
 	      GC9A01_write_command(0x20);
 }
+*/
+
+uint8_t tougle_test_pin = 0;
+
+void TIM15_IRQHandler(void){
+//	if(tougle_test_pin){
+//		TEST_ON();
+//	} else {
+//		TEST_OFF();
+//	}
+//	tougle_test_pin = !tougle_test_pin;
+//
+//	TIM15->SR &= ~TIM_SR_UIF;
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
+	if (htim == &htim6) {
+//		if(tougle_test_pin){
+//			TEST_ON();
+//		} else {
+//			TEST_OFF();
+//		}
+//		tougle_test_pin = !tougle_test_pin;
+
+
+
+
+
+	}
+}
 
 /* USER CODE END 0 */
 
@@ -197,10 +266,69 @@ int main(void)
   MX_SPI2_Init();
   MX_TIM16_Init();
   /* USER CODE BEGIN 2 */
-  GC9A01_init();
+
+
+//  HAL_TIM_Base_Start(&htim6);
+//  HAL_TIM_Base_Start_IT(&htim6);
+
+
+  gc9a01_t gc9a01;
+  gc9a01.spi = &hspi2;
+  gc9a01.frame = frame_buf;
+  gc9a01.frame_size = FRAME_SIZE;
+
+  gc9a01.res_port = RES_GPIO_Port;
+  gc9a01.res_pin = RES_Pin;
+  gc9a01.dc_port = DC_GPIO_Port;
+  gc9a01.dc_pin = DC_Pin;
+  gc9a01.cs_port = CS_GPIO_Port;
+  gc9a01.cs_pin = CS_Pin;
+
+
+  GC9A01_init(&gc9a01);
 
   HAL_TIM_PWM_Start(&htim16, TIM_CHANNEL_1);
   setPWM(50);
+
+//  uint8_t clr[3] = {0xFF, 0xFF, 0xFF};
+//  TestFillColor(clr);
+//
+//  HAL_Delay(500);
+//
+//  uint8_t clr2[3] = {0xFF, 0xFF, 0xFF};
+//  TestFillColor(clr2);
+
+
+  int increment = 16;
+  int fade_size = 0;
+  uint16_t color[ (6+1) * (255 / increment)];
+
+
+
+
+  for (int i = 0; i < 255; i += increment){
+	  color[fade_size++] = RGB565(255, i, 0); 	// red -> yellow
+  }
+
+  for (int i = 255; i >= 0; i -= increment){
+	  color[fade_size++] = RGB565(i, 255, 0); 	// yellow - > green
+  }
+
+  for (int i = 0; i < 255; i += increment){
+	  color[fade_size++] = RGB565(0, 255, i); 	// green -> cyan
+  }
+
+  for (int i = 255; i >= 0; i -= increment){
+	  color[fade_size++] = RGB565(0, i, 255); 	// cyan -> blue
+  }
+
+  for (int i = 0; i < 255; i += increment){
+	  color[fade_size++] = RGB565(i, 0, 255); 	// blue -> purple
+  }
+
+  for (int i = 255; i >= 0; i -= increment){
+	  color[fade_size++] = RGB565(255, 0, i); 	// purple -> red
+  }
 
   /* USER CODE END 2 */
 
@@ -211,7 +339,45 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  TestDisplayLoop();
+
+
+//	  color = RGB565(255, 0, 0);
+//	  for (int j = 0; j < 240 * 240; j++) {
+//		  frame_buf[j] = color; // red
+//	  }
+//	  GC9A01_spi_frame(&gc9a01);
+//	  HAL_Delay(1000);
+//
+//
+//
+//	  color = RGB565(0, 255, 0);
+//	  for (int j = 0; j < 240 * 240; j++) {
+//		  frame_buf[j] = color; // green
+//	  }
+//	  GC9A01_spi_frame(&gc9a01);
+//	  HAL_Delay(1000);
+//
+//
+//
+//	  color = RGB565(0, 0, 255);
+//	  for (int j = 0; j < 240 * 240; j++) {
+//		  frame_buf[j] = color; // blue
+//	  }
+//	  GC9A01_spi_frame(&gc9a01);
+//	  HAL_Delay(1000);
+
+
+
+
+	  for(int i = 0; i < fade_size; i++){
+		  for (int j = 0; j < 240 * 240; j++) {
+			  frame_buf[j] = color[i];
+		  }
+		  GC9A01_spi_frame(&gc9a01);
+	  }
+
+
+
   }
   /* USER CODE END 3 */
 }
