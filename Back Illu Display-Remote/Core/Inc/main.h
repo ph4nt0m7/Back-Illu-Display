@@ -41,6 +41,8 @@ extern "C" {
 
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
+#define TEST_ON()			TEST_PIN_GPIO_Port->BSRR = (uint32_t) TEST_PIN_Pin;
+#define TEST_OFF()			TEST_PIN_GPIO_Port->BRR	= (uint32_t) TEST_PIN_Pin;
 
 /* USER CODE END EC */
 
